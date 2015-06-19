@@ -7,3 +7,6 @@ A few basic steps to be taken:
 1) Debug errors as people discover them.
 2) Create a configuration file that contains local paths to code, data, and output.
 3) Split out various subroutines into separate files to keep things tidy.
+
+(18-Jun-2015)
+As it stands, to run this you need to download all R files and set directories and courses and in config.R. Notice that you can set 'codedir', the path to the code in the config file. The best thing to do is place all your files in that directory, and or just initiate this GitHub project there.
