@@ -1,7 +1,7 @@
 #Config.R: sourcing this will create the variables at the current level.
 
   #Define some directories
-  codedir <- "/Users/benkoester/REBUILD/matz_paper"                         #Code goes here
+  codedir <- "/Users/benkoester/REBUILD/matz_paper/cic-gp/"                 #Code goes here (git directory!)
   plotdir <- '~/Box.Sync/Box Sync/InComingPlots/matz_paper/'                #Plots are written here
   datadir <- "/Users/benkoester/Box.Sync/Box\ Sync/REBUILD.NON/matz_paper/" #data is read from here.
   setwd(codedir)

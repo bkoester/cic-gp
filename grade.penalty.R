@@ -19,6 +19,9 @@
 #   and the difference in grade between the first and last attempts for males and females. 
 #   This is only meaningful if you didn't clean these out of your data. 
 #   WARNING: THIS WILL CRASH IF handle_duplicates=TRUE.
+#6) composite=TRUE
+#   By default matching and regression use composite test scores. 
+#   If set to FALSE they will use MATH and ENGL scores.
 #   Updates:
 #   11-Jun-2015 (v2)
 #    -- Fixed bug that caused full_analysis to crash for first terms with < 50 students
@@ -29,17 +32,15 @@
 #    -- set default to not do anything about duplicates (i.e. handle_duplicates == FALSE)
 #    -- added library call to epicalc for R > 3.1 users, who must install from source.
 #    -- included options (analyze_duplicates == TRUE) for basic duplicates analysis
+#   24-Jun-2015 (v4)
+#    -- added option to use composite scores in analysis OR component (math and english/verbal)
 ######
-grade.penalty <- function(verbose=FALSE,full_analysis=FALSE,handle_duplicates=FALSE,analyze_duplicates=TRUE)
+grade.penalty <- function(verbose=FALSE,full_analysis=FALSE, handle_duplicates=FALSE,
+                          analyze_duplicates=TRUE,composite=TRUE)
 {
   
-#Set your working, data, and code directories.  Could all be the same in principle.
-codedir <- "/Users/benkoester/REBUILD/matz_paper"                         #Code goes here
-plotdir <- '~/Box.Sync/Box Sync/InComingPlots/matz_paper/'                #Plots are written here
-datadir <- "/Users/benkoester/Box.Sync/Box\ Sync/REBUILD.NON/matz_paper/" #data is read from here.
-setwd(codedir)
-
-#Put the file Startup.R in CODEDIR. This downloads and installs the libraries required
+#Define local things in these files: libraries, courses, and other stuff
+source ("config.R")
 source ("startup.R")
 
 #Read in the two data tables and merge
@@ -60,15 +61,6 @@ sc <- sc[which(e),]
 
 #If it isn't then make it so:
 sc$GPAO_GRANULAR = round(floor(sc$GPAO*3)/3, digits=1)
-
-#This will be local names for the courses to be analyzed.
-course_list <- c('BIOLOGY 171','BIOLOGY 172','BIOLOGY 173')#
-                 #'CHEM 130','CHEM 210','CHEM 211','CHEM 215',
-                 #'MATH 115','MATH 116',
-                 #'PHYSICS 140','PHYSICS 141','PHYSICS 240','PHYSICS 241',
-                 #'ECON 101',
-                 #'PSYCH 111',
-                 #'ENGLISH 125')
 
 #All of the plots in the next section will go to this file:
 pdf(paste(plotdir, "GP.plots.pdf", sep = ""))
@@ -165,16 +157,16 @@ for( i in 1:length(course_list))
       #Format things for regression and matching
       reg_input <- make.regression.format(wc)
       
-      #Do the regression analysis for the course
-      #reg <- glm(GRADE ~ GPAO + GENDER + TEST_MATH + TEST_ENGL+TERM + TEST_COMP,data=reg_input)
-      reg  <- glm(GRADE ~ GPAO + GENDER + TERM + TEST_COMP,data=reg_input)
+      #Do the regression analysis for the course. Use either composite or component scores
+      if (composite == FALSE){reg <- glm(GRADE ~ GPAO + GENDER + TEST_MATH + TEST_ENGL+TERM + TEST_COMP,data=reg_input)}
+      if (composite == TRUE)reg  <- glm(GRADE ~ GPAO + GENDER + TERM + TEST_COMP,data=reg_input)
       if (verbose == TRUE)
       {
         print(signif(summary(reg)$coefficients,4))
       }
       #Do the matching analysis. The result contains the mean and standard error of the differential GP.
       #First with males as the controls group
-      males_ctrl_omatch <- full.gender.matching(reg_input,verbose=verbose) 
+      males_ctrl_omatch <- full.gender.matching(reg_input,verbose=verbose,composite=composite) 
       #Then with females
       #females_ctrl_omatch <- full.gender.matching(reg_input,verbose=verbose,rev=TRUE)
       
@@ -332,10 +324,10 @@ make.regression.format <- function(wc)
 #
 #WHAT THIS DOES:
 #1) Expects data in the format output by MAKE.REGRESSION.FORMAT()
-#2) Does 'optimal matching' by term, on the basis of GPAO, TEST_ENGL, TEST_MATH
+#2) Does 'optimal matching' by term, on the basis of GPAO, & (TEST_ENGL, TEST_MATH) or TEST_COMP (composite == TRUE)
 #3) In verbose mode (verbose = TRUE), prints out post-match balance statistics
 #4) Returns an effect size by computing a weighted average of the cases - controls.
-full.gender.matching <- function(reg_input,verbose=FALSE,rev=FALSE)
+full.gender.matching <- function(reg_input,verbose=FALSE,rev=FALSE,composite=TRUE)
 {
   print('matching by term')
   
@@ -353,8 +345,16 @@ full.gender.matching <- function(reg_input,verbose=FALSE,rev=FALSE)
   if (verbose == TRUE)
   {
     print('checking input balance')
-    bal <- xBalance(squant ~ GPAO +
+    if (composite == TRUE)
+    {
+      bal <- xBalance(squant ~ GPAO +
                     TEST_COMP,data=reg_input, report = c("chisquare.test"))
+    }
+    else
+    {
+      bal <- xBalance(squant ~ GPAO +
+                        TEST_ENGL+TEST_MATH,data=reg_input, report = c("chisquare.test"))
+    }
     print(bal$overall)
   }
   
@@ -373,7 +373,14 @@ full.gender.matching <- function(reg_input,verbose=FALSE,rev=FALSE)
       sub_input <- reg_input[e,]
       
       #Create the GLM model that is the basis for for the Mahalanobis distances
-      model <- glm(squant ~ GPAO + TEST_COMP, family=binomial(), data=sub_input)
+      if (composite == TRUE)
+      {
+        model <- glm(squant ~ GPAO + TEST_COMP, family=binomial(), data=sub_input)
+      }
+      else
+      {
+        model <- glm(squant ~ GPAO + TEST_MATH + TEST_ENGL, family=binomial(), data=sub_input)
+      }
       
       #Create a matching object
       mmon    <- match_on(model)
@@ -387,9 +394,18 @@ full.gender.matching <- function(reg_input,verbose=FALSE,rev=FALSE)
       #Print out the quality statistics of the match
       if (verbose == TRUE)
       {
-        post.bal <- xBalance(squant ~ GPAO + TEST_COMP,data=sub_input, 
+        if (composite == TRUE)
+        {
+          post.bal <- xBalance(squant ~ GPAO + TEST_COMP,data=sub_input, 
                              report = c("all"),
                              strata = data.frame(original = factor("none"), m1))
+        }
+        else
+        {
+          post.bal <- xBalance(squant ~ GPAO + TEST_MATH + TEST_ENGL,data=sub_input, 
+                               report = c("all"),
+                               strata = data.frame(original = factor("none"), m1))
+        }  
         print(post.bal$overall)
       }
       
