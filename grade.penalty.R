@@ -37,6 +37,8 @@
 #   4-Jul-2015 (v5)
 #    -- set default behavior to use the COMPONENT test scores in regression/matching.
 #    -- fixed bug in component regression that mistakenly also included TEST_COMP.
+#   6-Jul-2015 (v6) 
+#    -- added single term handling to regression modeling
 ######
 grade.penalty <- function(verbose=FALSE,full_analysis=FALSE, handle_duplicates=FALSE,
                           analyze_duplicates=TRUE,composite=FALSE)
