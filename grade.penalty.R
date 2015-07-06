@@ -19,8 +19,8 @@
 #   and the difference in grade between the first and last attempts for males and females. 
 #   This is only meaningful if you didn't clean these out of your data. 
 #   WARNING: THIS WILL CRASH IF handle_duplicates=TRUE.
-#6) composite=TRUE
-#   By default matching and regression use composite test scores. 
+#6) composite=FALSE
+#   By default matching and regression use component test scores. 
 #   If set to FALSE they will use MATH and ENGL scores.
 #   Updates:
 #   11-Jun-2015 (v2)
@@ -125,15 +125,18 @@ for( i in 1:length(course_list))
   #Pick out only what we want
   wc = subset(sc, CATALOG_NBR == cn)
   
+  #How many terms are there?
+  NTERMS <- length(wc$TERM[!duplicated(wc$TERM)])
+
   #Now handle duplicates
-  if (handle_duplicates == TRUE)
+  if (handle_duplicates == TRUE & NTERMS > 1)
   {
     keep <- remove.duplicates(wc,keep='LAST',verbose=TRUE)
     wc   <- wc[keep,]
   }
   
   #Get duplicate statistics if desired.
-  if (analyze_duplicates == TRUE & handle_duplicates == FALSE)
+  if (analyze_duplicates == TRUE & handle_duplicates == FALSE & NTERMS > 1)
   {
     if (verbose == TRUE){print('computing duplicate statistics')}
     dup_res <- duplicates.bias.or.noise(wc)
@@ -148,6 +151,7 @@ for( i in 1:length(course_list))
     NDUP_F[i]   <- dup_res$NDUP_F
     GDIFF_F[i]  <- dup_res$GDIFF_F
   }
+
   #Could be a course with low enrollment
   if (dim(wc)[1] > 50)
     
@@ -160,11 +164,19 @@ for( i in 1:length(course_list))
       #Format things for regression and matching
       reg_input <- make.regression.format(wc)
       
-      #Do the regression analysis for the course. Use either composite or component scores
-      if (composite == FALSE){reg <- glm(GRADE ~ GPAO + GENDER + TEST_MATH + TEST_ENGL+TERM,data=reg_input)}
-      if (composite == TRUE)reg  <- glm(GRADE ~ GPAO + GENDER + TERM + TEST_COMP,data=reg_input)
+      #Do the regression analysis for the course. Use either composite or component scores.
+      #If there is more than one term, use TERM as a regression variable.
+      if (composite == FALSE & NTERMS > 1) {reg <- glm(GRADE ~ GPAO + GENDER + TEST_MATH + TEST_ENGL+TERM,data=reg_input)}
+      if (composite == FALSE & NTERMS == 1){reg <- glm(GRADE ~ GPAO + GENDER + TEST_MATH + TEST_ENGL,data=reg_input)}
+      if (composite == TRUE  & NTERMS > 1) {reg  <- glm(GRADE ~ GPAO + GENDER + TERM + TEST_COMP,data=reg_input)}
+      if (composite == TRUE  & NTERMS == 1){reg  <- glm(GRADE ~ GPAO + GENDER + TEST_COMP,data=reg_input)}
+      
       if (verbose == TRUE)
       {
+        print(paste('Found',NTERMS,'terms'))
+        if (NTERMS > 1){print('included  TERM as a covariate')}
+        if (NTERMS ==1){print('not using TERM as a covariate')}
+        
         print(signif(summary(reg)$coefficients,4))
       }
       #Do the matching analysis. The result contains the mean and standard error of the differential GP.
