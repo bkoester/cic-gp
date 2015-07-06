@@ -34,9 +34,12 @@
 #    -- included options (analyze_duplicates == TRUE) for basic duplicates analysis
 #   24-Jun-2015 (v4)
 #    -- added option to use composite scores in analysis OR component (math and english/verbal)
+#   4-Jul-2015 (v5)
+#    -- set default behavior to use the COMPONENT test scores in regression/matching.
+#    -- fixed bug in component regression that mistakenly also included TEST_COMP.
 ######
 grade.penalty <- function(verbose=FALSE,full_analysis=FALSE, handle_duplicates=FALSE,
-                          analyze_duplicates=TRUE,composite=TRUE)
+                          analyze_duplicates=TRUE,composite=FALSE)
 {
   
 #Define local things in these files: libraries, courses, and other stuff
@@ -158,7 +161,7 @@ for( i in 1:length(course_list))
       reg_input <- make.regression.format(wc)
       
       #Do the regression analysis for the course. Use either composite or component scores
-      if (composite == FALSE){reg <- glm(GRADE ~ GPAO + GENDER + TEST_MATH + TEST_ENGL+TERM + TEST_COMP,data=reg_input)}
+      if (composite == FALSE){reg <- glm(GRADE ~ GPAO + GENDER + TEST_MATH + TEST_ENGL+TERM,data=reg_input)}
       if (composite == TRUE)reg  <- glm(GRADE ~ GPAO + GENDER + TERM + TEST_COMP,data=reg_input)
       if (verbose == TRUE)
       {
