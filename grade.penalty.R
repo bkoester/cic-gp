@@ -39,6 +39,10 @@
 #    -- fixed bug in component regression that mistakenly also included TEST_COMP.
 #   6-Jul-2015 (v6) 
 #    -- added single term handling to regression modeling
+#   25-July-2015 (v7)
+#    -- for courses with NO terms with > 50 students, matching fails gracefully:
+#       prints error to screen
+#    -- all matching results will be set to NA
 ######
 grade.penalty <- function(verbose=FALSE,full_analysis=FALSE, handle_duplicates=FALSE,
                           analyze_duplicates=TRUE,composite=FALSE)
@@ -153,7 +157,7 @@ for( i in 1:length(course_list))
     NDUP_F[i]   <- dup_res$NDUP_F
     GDIFF_F[i]  <- dup_res$GDIFF_F
   }
-
+  
   #Could be a course with low enrollment
   if (dim(wc)[1] > 50)
     
@@ -379,6 +383,7 @@ full.gender.matching <- function(reg_input,verbose=FALSE,rev=FALSE,composite=TRU
   termlist <- reg_input$TERM[!duplicated(reg_input$TERM)]
   nterm <- length(termlist)
   flag <- 0
+  tflag <- 0
   
   for (i in 1:nterm)
   {
@@ -387,8 +392,8 @@ full.gender.matching <- function(reg_input,verbose=FALSE,rev=FALSE,composite=TRU
     #Require that the course-term has enough people.
     if (sum(e) > 50)
     {
+      tflag <- 1
       sub_input <- reg_input[e,]
-      
       #Create the GLM model that is the basis for for the Mahalanobis distances
       if (composite == TRUE)
       {
@@ -477,27 +482,40 @@ full.gender.matching <- function(reg_input,verbose=FALSE,rev=FALSE,composite=TRU
   }
   
   #A table of all the results, that is, all case-control grade penalties
-  #for all terms
-  struct <- data.frame(alldiff,allwt)
+  #for all terms. If all terms have < 50, spit out a warning, give NA for the table.
   
-  #Now compute the actual mean and error from this table
-  #Use bootstrap estimates to get the mean and CIs/SEs
-  
-  nmtch  <- length(struct$alldiff)
-  print(nmtch)
-  nboot <- 1000
-  reps  <- mat.or.vec(nboot,1)
-  for (k in 1:nboot)
+  if (tflag == 0)
+    {
+      print('warning: course has no terms with > 50 students. Matching fails.')
+      print('setting all matching outputs to NA!')
+      mneff <- NA
+      seeff <- NA
+      minctrls <- NA
+      maxctrls <- NA
+      unmatch <- NA
+    }
+  if (tflag == 1)
   {
-    sub <-sample(1:nmtch,nmtch,replace=TRUE)
-    reps[k] <- weighted.mean(struct$alldiff[sub],struct$allwt[sub],na.rm=TRUE)
-  }
-  mneff <- mean(reps)
-  seeff <- sqrt(var(reps))
-  minctrls <- min(allwt)
-  maxctrls <- max(allwt)
-  unmatch <- sum(is.na(struct$alldiff))
+    struct <- data.frame(alldiff,allwt)
   
+    #Now compute the actual mean and error from this table
+    #Use bootstrap estimates to get the mean and CIs/SEs
+  
+    nmtch  <- length(struct$alldiff)
+    print(nmtch)
+    nboot <- 1000
+    reps  <- mat.or.vec(nboot,1)
+    for (k in 1:nboot)
+    {
+      sub <-sample(1:nmtch,nmtch,replace=TRUE)
+      reps[k] <- weighted.mean(struct$alldiff[sub],struct$allwt[sub],na.rm=TRUE)
+    }
+    mneff <- mean(reps)
+    seeff <- sqrt(var(reps))
+    minctrls <- min(allwt)
+    maxctrls <- max(allwt)
+    unmatch <- sum(is.na(struct$alldiff))
+  }
   
   return(c(mneff,seeff,minctrls,maxctrls,unmatch)) #return the relevant stats.
   #return(post.bal)
