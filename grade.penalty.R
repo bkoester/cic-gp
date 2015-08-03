@@ -22,6 +22,9 @@
 #6) composite=FALSE
 #   By default matching and regression use component test scores. 
 #   If set to FALSE they will use MATH and ENGL scores.
+#7) bigplot=TRUE
+#   By default, all plots are dumped into a single PDF. If FALSE, each plot goes to plotdir 
+#   directory, with a name matching the course name.
 #   Updates:
 #   11-Jun-2015 (v2)
 #    -- Fixed bug that caused full_analysis to crash for first terms with < 50 students
@@ -43,9 +46,11 @@
 #    -- for courses with NO terms with > 50 students, matching fails gracefully:
 #       prints error to screen
 #    -- all matching results will be set to NA
+#   3-Aug-2015 (v8)
+#    -- added option to plot to multiple files or to pile all plots in a single PDF.
 ######
 grade.penalty <- function(verbose=FALSE,full_analysis=FALSE, handle_duplicates=FALSE,
-                          analyze_duplicates=TRUE,composite=FALSE)
+                          analyze_duplicates=TRUE,composite=FALSE,bigplot=TRUE)
 {
   
 #Define local things in these files: libraries, courses, and other stuff
@@ -68,11 +73,10 @@ sc <- sc[which(e),]
 #If the GPAO is already granular (e.g confined to 4.0, 3.7, etc):
 #sc$GPAO_GRANULAR = sc$GPAO
 
+if (bigplot == TRUE){pdf(paste(plotdir,"GP.plots.pdf", sep = ""))}
+
 #If it isn't then make it so:
 sc$GPAO_GRANULAR = round(floor(sc$GPAO*3)/3, digits=1)
-
-#All of the plots in the next section will go to this file:
-pdf(paste(plotdir, "GP.plots.pdf", sep = ""))
 
 #Now create a single course ID
 sc$CATALOG_NBR <- paste(sc$SUBJECT,sc$CATALOGNBR,sep=" ")
@@ -127,6 +131,9 @@ for( i in 1:length(course_list))
   cn = course_list[i]
   print(cn)
   short_cn = cn #short_codes[i]
+  
+  #All of the will go to this file:
+  if (bigplot == FALSE){pdf(paste(plotdir,cn,".plots.pdf", sep = ""))}
   
   #Pick out only what we want
   wc = subset(sc, CATALOG_NBR == cn)
@@ -291,9 +298,11 @@ for( i in 1:length(course_list))
     
   } #if course size > n
   
+  if (bigplot == FALSE){dev.off()} #Turn off the plotting to PDF
+  
 } #Main Loop
 
-dev.off() #Turn off the plotting to PDF
+if (bigplot == TRUE){dev.off()}
 
 #Return the table of results
 output <- data.frame(course_list,
