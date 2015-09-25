@@ -25,6 +25,9 @@
 #7) bigplot=TRUE
 #   By default, all plots are dumped into a single PDF. If FALSE, each plot goes to plotdir 
 #   directory, with a name matching the course name.
+#8) ENROLL=FALSE
+#   Does not run by default. ENROLL=TRUE will compute by section enrollment and include it in the
+#   regression model (not matching yet) as a covariate.
 #   Updates:
 #   11-Jun-2015 (v2)
 #    -- Fixed bug that caused full_analysis to crash for first terms with < 50 students
@@ -48,9 +51,11 @@
 #    -- all matching results will be set to NA
 #   3-Aug-2015 (v8)
 #    -- added option to plot to multiple files or to pile all plots in a single PDF.
+#   20-Sept-2015 (v9)
+#    -- added routine to compute section enrollment, effect in regression model (ENROLL=TRUE)
 ######
 grade.penalty <- function(verbose=FALSE,full_analysis=FALSE, handle_duplicates=FALSE,
-                          analyze_duplicates=TRUE,composite=FALSE,bigplot=TRUE)
+                          analyze_duplicates=TRUE,composite=FALSE,bigplot=TRUE,ENROLL=FALSE)
 {
   
 #Define local things in these files: libraries, courses, and other stuff
@@ -61,6 +66,20 @@ source ("startup.R")
 data <- read.delim(paste(datadir,"student.course.tab",sep=""))
 sr   <- read.delim(paste(datadir,"student.record.tab",sep=""))
 sc <- merge(data,sr,by='ID',all.x=TRUE)
+
+#compute by-section enrollment numbers if the keyword is set, and exit gracefully if we don't find the 
+#right column.
+if (ENROLL == TRUE)
+{
+  if (!'SECTION' %in% names(sc))
+  {
+   print('Did not find SECTION column, ignoring ENROLLMENT')
+  }
+  if ('SECTION' %in% names(sc))
+  {
+  sc <- add.section.enrollment(sc)
+  }
+}
 
 #Now, only keep rows where the gender is F/M. Eliminate " " and "U" in case they are there.
 e <- sc$GENDER == 'M' | sc$GENDER == 'F'
@@ -124,7 +143,7 @@ GDIFF_F  <-  MALES_FULL_MEAN_GP
 
 
 #Loop through all of the courses and print each plot:
-for( i in 1:length(course_list))
+for( i in 1:1)#length(course_list))
 {
   
   #CHOOSE A COURSE TO ANALYZE
@@ -178,11 +197,23 @@ for( i in 1:length(course_list))
       reg_input <- make.regression.format(wc)
       
       #Do the regression analysis for the course. Use either composite or component scores.
-      #If there is more than one term, use TERM as a regression variable.
-      if (composite == FALSE & NTERMS > 1) {reg <- glm(GRADE ~ GPAO + GENDER + TEST_MATH + TEST_ENGL+TERM,data=reg_input)}
-      if (composite == FALSE & NTERMS == 1){reg <- glm(GRADE ~ GPAO + GENDER + TEST_MATH + TEST_ENGL,data=reg_input)}
-      if (composite == TRUE  & NTERMS > 1) {reg  <- glm(GRADE ~ GPAO + GENDER + TERM + TEST_COMP,data=reg_input)}
-      if (composite == TRUE  & NTERMS == 1){reg  <- glm(GRADE ~ GPAO + GENDER + TEST_COMP,data=reg_input)}
+      #If there is more than one term, use TERM as a regression variable. 
+      #If ENROLL is false, dont' include it in the regression model:
+      if (ENROLL == FALSE)
+      {
+        if (composite == FALSE & NTERMS > 1) {reg <- glm(GRADE ~ GPAO + GENDER + TEST_MATH + TEST_ENGL+TERM,data=reg_input)}
+        if (composite == FALSE & NTERMS == 1){reg <- glm(GRADE ~ GPAO + GENDER + TEST_MATH + TEST_ENGL,data=reg_input)}
+        if (composite == TRUE  & NTERMS > 1) {reg  <- glm(GRADE ~ GPAO + GENDER + TERM + TEST_COMP,data=reg_input)}
+        if (composite == TRUE  & NTERMS == 1){reg  <- glm(GRADE ~ GPAO + GENDER + TEST_COMP,data=reg_input)}
+      }
+      if (ENROLL == TRUE)
+      {
+        if (composite == FALSE & NTERMS > 1) {reg <- glm(GRADE ~ GPAO + GENDER + TEST_MATH + TEST_ENGL+SENROLL,data=reg_input)}
+        if (composite == FALSE & NTERMS == 1){reg <- glm(GRADE ~ GPAO + GENDER + TEST_MATH + TEST_ENGL+SENROLL,data=reg_input)}
+        if (composite == TRUE  & NTERMS > 1) {reg  <- glm(GRADE ~ GPAO + GENDER + TEST_COMP+SENROLL,data=reg_input)}
+        if (composite == TRUE  & NTERMS == 1){reg  <- glm(GRADE ~ GPAO + GENDER + TEST_COMP+SENROLL,data=reg_input)}
+      }
+      
       
       if (verbose == TRUE)
       {
@@ -335,6 +366,14 @@ make.regression.format <- function(wc)
   TEST_COMP        <- as.numeric(wc$TEST_COMP)
   TERM             <- as.factor(wc$TERM)
   reg_input        <- data.frame(GRADE,GPAO,GENDER,TEST_MATH,TEST_ENGL,TEST_COMP,TERM)
+  
+  if ('SECTION' %in% names(wc))
+  {
+    SENROLL       <- as.numeric(wc$ENROLL)
+    reg_input     <- data.frame(reg_input,SENROLL)
+    reg <- glm(GRADE ~ GPAO + GENDER + TEST_MATH + TEST_ENGL+TERM+SENROLL,data=reg_input)
+    
+  }
   
   #Matching needs gender also to be kept as an integer...
   reg_input$squant <- as.numeric(ifelse(reg_input$GENDER=="F", 0, 1))
@@ -530,6 +569,36 @@ full.gender.matching <- function(reg_input,verbose=FALSE,rev=FALSE,composite=TRU
   #return(post.bal)
   
 }
+
+
+#If the section tag exists, this will add the enrollment by section.
+add.section.enrollment <- function(sc)
+{
+  if ('SECTION' %in% names(sc))
+  {
+    sc$COURSE_LONG <- paste(sc$SUBJECT,sc$CATALOGNBR,sc$TERM,sc$SECTION,sep="")
+    sc       <- sc[order(sc$COURSE_LONG), ]
+    sc$count <- sequence(rle(as.vector(sc$COURSE_LONG))$lengths)
+
+    nid    <- length(sc$COURSE_LONG[!duplicated(sc$COURSE_LONG)])
+    nstart <- which(sc$count == 1)
+    ntot   <- length(sc$COURSE_LONG)
+
+    ENROLL <- mat.or.vec(ntot,1)
+
+    for (j in 1:nid)
+    {
+      start_ind <- nstart[j]
+      if (j < nid){stop_ind  <- nstart[j+1]-1}
+      if (j == nid){stop_ind <- ntot}
+      ind <- c(start_ind:stop_ind)
+      ENROLL[ind] <- length(ind)
+    }
+    sc <- data.frame(sc,ENROLL)   
+  }
+    return(sc)
+}
+
 
 #####################################
 #REMOVE.DUPLICATES
