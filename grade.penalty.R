@@ -28,6 +28,9 @@
 #8) ENROLL=FALSE
 #   Does not run by default. ENROLL=TRUE will compute by section enrollment and include it in the
 #   regression model (not matching yet) as a covariate.
+#9) TERM_STABILITY=TRUE
+#   By default, term stability plots are created and added to the same file as the GP plots. Set to FALSE
+#   to deactivate.
 #   Updates:
 #   11-Jun-2015 (v2)
 #    -- Fixed bug that caused full_analysis to crash for first terms with < 50 students
@@ -53,9 +56,11 @@
 #    -- added option to plot to multiple files or to pile all plots in a single PDF.
 #   20-Sept-2015 (v9)
 #    -- added routine to compute section enrollment, effect in regression model (ENROLL=TRUE)
+#   7-Nov-2015 (v10)
+#    -- added routine to create term stability plots by default(TERM_STABILITY=TRUE)
 ######
 grade.penalty <- function(verbose=FALSE,full_analysis=FALSE, handle_duplicates=FALSE,
-                          analyze_duplicates=TRUE,composite=FALSE,bigplot=TRUE,ENROLL=FALSE)
+                          analyze_duplicates=TRUE,composite=FALSE,bigplot=TRUE,ENROLL=FALSE,TERM_STABILITY=TRUE)
 {
   
 #Define local things in these files: libraries, courses, and other stuff
@@ -143,7 +148,7 @@ GDIFF_F  <-  MALES_FULL_MEAN_GP
 
 
 #Loop through all of the courses and print each plot:
-for( i in 1:1)#length(course_list))
+for( i in 1:length(course_list))
 {
   
   #CHOOSE A COURSE TO ANALYZE
@@ -326,7 +331,7 @@ for( i in 1:1)#length(course_list))
       GENDER_EFF_REG[i]     <- signif(summary(reg)$coefficients[3,1],4)
       GENDER_EFF_PVAL[i]    <- signif(summary(reg)$coefficients[3,4],4)
     }
-    
+    if (TERM_STABILITY == TRUE){plot.term.stability(wc)}
   } #if course size > n
   
   if (bigplot == FALSE){dev.off()} #Turn off the plotting to PDF
@@ -675,6 +680,74 @@ remove.duplicates <- function(data,keep='NONE',verbose=FALSE)
   
 }
 
+#Makes the grade-penalty by TERM/GENDER plot for a course.
+plot.term.stability <- function(sc)
+{
+  sc       <- sc[order(sc$TERM), ]
+  sc$count <- sequence(rle(as.vector(sc$TERM))$lengths)
+  
+  nid    <- length(sc$TERM[!duplicated(sc$TERM)])
+  nstart <- which(sc$count == 1)
+  ntot   <- length(sc$TERM)
+  
+  GPAOM  <- mat.or.vec(nid,1)
+  GPAOF  <- GPAOM
+  GRADEM <- GPAOM
+  GRADEF <- GPAOM
+  TERM   <- GPAOM
+  FTERM  <- GPAOM
+  SUBJECT    <- sc$SUBJECT[1]
+  CATALOGNBR <- sc$CATALOGNBR[1]
+  
+  for (j in 1:nid)
+  {
+    start_ind <- nstart[j]
+    if (j < nid){stop_ind  <- nstart[j+1]-1}
+    if (j == nid){stop_ind <- ntot}
+    ind <- c(start_ind:stop_ind)
+  
+    sub <- sc[ind,]
+    f   <- which(sub$GENDER == 'F')
+    m   <- which(sub$GENDER == 'M')
+    
+    TERM[j]   <- sub$TERM[1]
+    GPAOM[j]  <- mean(sub$GPAO[m],na.rm=TRUE)
+    GRADEM[j] <- mean(sub$GRADE[m],na.rm=TRUE)
+    GPAOF[j]  <- mean(sub$GPAO[f],na.rm=TRUE)
+    GRADEF[j] <- mean(sub$GRADE[f],na.rm=TRUE)
+  }
+  
+  for (i in 1:(nid-1)){FTERM[i] <- (TERM[i+1]-TERM[i])*0.25}
+  e     <- FTERM > 0
+  delta <- min(FTERM[e])
+  FTERM <- TERM+delta
+  
+  e <- GRADEM !=0 & GRADEF != 0
+  TERM <- TERM[e]
+  FTERM <- FTERM[e]
+  GRADEM <- GRADEM[e]
+  GRADEF <- GRADEF[e]
+  GPAOM  <- GPAOM[e]
+  GPAOF  <- GPAOF[e]
+  
+  rvec <- (c(GPAOM,GRADEM,GPAOF,GRADEF))
+  yrange <- c(2,4)
+  
+  
+  plot(TERM,GPAOM,pch='+',xlab='TERM',main=paste(SUBJECT,CATALOGNBR,sep=" "),
+       ylab='GPAO and Grade',col='blue',ylim=yrange)
+  arrows(TERM,GPAOM,TERM,GRADEM,code=2,col='blue',length=0.1)
+  points(FTERM,GPAOF,pch='+',col='red')
+  arrows(FTERM,GPAOF,FTERM,GRADEF,code=2,col='red',length=0.1)
+  legend(TERM[1],4.0,c('Females','Males'),pch=c('+','+'),col=c('red','blue'))
+  
+  
+}
+
+
+
+
+#This computes some simple statistics about duplicates
 duplicates.bias.or.noise <- function(data)
 {
     
